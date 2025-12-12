@@ -120,10 +120,10 @@ python pathocam_scanner.py
 
 #### Hình ảnh kết quả
 
-![Ảnh quét mẫu mô bệnh học]![1765520883607](image/README/1765520883607.png)
+![Ảnh quét mẫu mô bệnh học](./image/README/1765520883607.png)
 *Ví dụ ảnh quét mẫu mô bệnh học*
 
-![Giao diện chương trình]![1765520872427](image/README/1765520872427.png)
+![Giao diện chương trình](./image/README/1765520872427.png)
 *Giao diện PathoCam Scanner*
 
 #### Video demo
