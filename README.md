@@ -4,8 +4,8 @@
 
 PathoCam Clone là một hệ thống phần mềm quét slide kính hiển vi thủ công (Manual Whole Slide Imaging) được phát triển để số hóa các mẫu mô bệnh học. Dự án này sử dụng công nghệ Image Registration tiên tiến để tự động ghép các ảnh tile thành một bức ảnh toàn cảnh chất lượng cao.
 
-**Phiên bản:** 7.0 - Image Registration  
-**Ngôn ngữ:** Python 3  
+**Phiên bản:** 7.0 - Image Registration
+**Ngôn ngữ:** Python 3
 **Framework:** PyQt5, OpenCV
 
 ## ✨ Tính năng chính
@@ -22,12 +22,13 @@ PathoCam Clone là một hệ thống phần mềm quét slide kính hiển vi t
 
 ### Thuật toán
 
-1. **Position Tracking (Rough)**: 
+1. **Position Tracking (Rough)**:
+
    - Sử dụng Phase Correlation để ước lượng vị trí di chuyển giữa các frame
    - Downscale ảnh để tăng tốc xử lý
    - Lọc nhiễu với ngưỡng 5 pixels
-
 2. **Image Registration (Precise)**:
+
    - Template Matching với canvas hiện tại để tìm vị trí chính xác
    - Tìm kiếm trong vùng ±150 pixels từ vị trí ước lượng
    - Sử dụng template từ trung tâm tile để tăng tốc
@@ -130,7 +131,6 @@ Có thể thêm các hình ảnh như:
 
 **Ví dụ cấu trúc thêm hình ảnh:**
 
-```markdown
 ### Ảnh quét mẫu mô bệnh học
 
 ![1765513095174](image/README/1765513095174.png)
@@ -141,8 +141,7 @@ Có thể thêm các hình ảnh như:
 
 ### Video demo
 
-Xem video demo tại: [PathoCam - Manual Whole Slide Imaging Software, Digital slides.mp4]![1765513118199](image/README/1765513118199.mp4)
-```
+Xem video demo tại: [![Video demo](./image/README/1765519716024.png)](./video/wsi-demo.mp4)
 
 ## 📊 Thống kê kỹ thuật
 
@@ -197,11 +196,11 @@ Dự án này được phát triển cho mục đích giáo dục và nghiên c�
 ## 🙏 Lời cảm ơn
 
 Cảm ơn các thư viện mã nguồn mở:
+
 - OpenCV team
-- NumPy team  
+- NumPy team
 - PyQt5 team
 
 ---
 
 **Lưu ý**: Đây là phiên bản 7.0 với cải tiến Image Registration. Để có kết quả tốt nhất, vui lòng tuân thủ các hướng dẫn sử dụng ở trên.
-
