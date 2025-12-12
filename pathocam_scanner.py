@@ -321,6 +321,28 @@ class SimpleTracker:
 
 
 # ============================================================================
+# CAMERA SETTINGS - Euromex CMEX-5f DC.5000f
+# ============================================================================
+
+# Camera resolution presets
+CAMERA_RESOLUTIONS = {
+    "5MP (2560x1920)": (2560, 1920, 50),   # Full resolution
+    "3MP (2048x1536)": (2048, 1536, 50),   # Good balance
+    "2MP (1600x1200)": (1600, 1200, 50),   # Higher FPS
+    "HD (1280x720)": (1280, 720, 50),       # Standard HD
+}
+
+# Euromex DC.5000f specifications
+CAMERA_SPECS = {
+    "sensor": "CMOS 1/2.8 inch",
+    "pixels": "2560 x 1920 (5.0 Mpix)",
+    "pixel_size_um": 2.0,  # 2.0 μm x 2.0 μm
+    "color_depth": 24,  # bits
+    "interface": "USB 2.0",
+}
+
+
+# ============================================================================
 # CAMERA THREAD
 # ============================================================================
 
@@ -328,10 +350,12 @@ class CameraThread(QThread):
     frame_ready = pyqtSignal(np.ndarray)
     error = pyqtSignal(str)
     
-    def __init__(self, index: int = 0):
+    def __init__(self, index: int = 0, resolution: str = "5MP (2560x1920)"):
         super().__init__()
         self.index = index
+        self.resolution = resolution
         self.running = False
+        self.actual_resolution = (0, 0)
         
     def run(self):
         cap = cv2.VideoCapture(self.index, cv2.CAP_DSHOW)
@@ -341,19 +365,37 @@ class CameraThread(QThread):
         if not cap.isOpened():
             self.error.emit("Không thể mở camera!")
             return
-            
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        
+        # Get resolution settings
+        res = CAMERA_RESOLUTIONS.get(self.resolution, (2560, 1920, 30))
+        width, height, fps = res
+        
+        # Apply camera settings for Euromex DC.5000f
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_FPS, fps)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
+        # Optimize image quality settings
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus if available
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # Manual exposure mode
+        
+        # Get actual resolution
+        self.actual_resolution = (
+            int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        )
+        
         self.running = True
+        
+        # Adjust sleep based on target FPS
+        sleep_ms = max(20, int(1000 / fps) - 5)
         
         while self.running:
             ret, frame = cap.read()
             if ret:
                 self.frame_ready.emit(frame)
-            self.msleep(30)
+            self.msleep(sleep_ms)
             
         cap.release()
         
@@ -434,16 +476,28 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left)
         
         # Camera
-        cam_group = QGroupBox("📷 Camera")
+        cam_group = QGroupBox("📷 Camera (Euromex DC.5000f)")
         cam_layout = QGridLayout(cam_group)
         
+        cam_layout.addWidget(QLabel("Camera:"), 0, 0)
         self.cam_combo = QComboBox()
         self.cam_combo.addItems([f"Camera {i}" for i in range(5)])
-        cam_layout.addWidget(self.cam_combo, 0, 0, 1, 2)
+        cam_layout.addWidget(self.cam_combo, 0, 1)
+        
+        cam_layout.addWidget(QLabel("Resolution:"), 1, 0)
+        self.res_combo = QComboBox()
+        self.res_combo.addItems(list(CAMERA_RESOLUTIONS.keys()))
+        self.res_combo.setCurrentIndex(0)  # Default: 5MP
+        cam_layout.addWidget(self.res_combo, 1, 1)
         
         self.connect_btn = QPushButton("🔌 Kết nối Camera")
         self.connect_btn.clicked.connect(self.toggle_camera)
-        cam_layout.addWidget(self.connect_btn, 1, 0, 1, 2)
+        cam_layout.addWidget(self.connect_btn, 2, 0, 1, 2)
+        
+        # Resolution info label
+        self.res_info_label = QLabel("Sensor: CMOS 1/2.8\" | Pixel: 2.0μm")
+        self.res_info_label.setStyleSheet("font-size: 10px; color: #7aa2f7;")
+        cam_layout.addWidget(self.res_info_label, 3, 0, 1, 2)
         
         left_layout.addWidget(cam_group)
         
@@ -557,7 +611,8 @@ class MainWindow(QMainWindow):
             self.disconnect_camera()
             
     def connect_camera(self):
-        self.camera = CameraThread(self.cam_combo.currentIndex())
+        resolution = self.res_combo.currentText()
+        self.camera = CameraThread(self.cam_combo.currentIndex(), resolution)
         self.camera.frame_ready.connect(self.on_frame)
         self.camera.error.connect(lambda m: QMessageBox.critical(self, "Lỗi", m))
         self.camera.start()
@@ -565,6 +620,10 @@ class MainWindow(QMainWindow):
         self.connect_btn.setText("🔌 Ngắt kết nối")
         self.connect_btn.setStyleSheet("background-color: #e0af68; color: #1a1b26;")
         self.start_btn.setEnabled(True)
+        
+        # Disable resolution change while connected
+        self.res_combo.setEnabled(False)
+        self.cam_combo.setEnabled(False)
         
         self.canvas_timer.start()
         self.stat_timer.start()
@@ -578,6 +637,10 @@ class MainWindow(QMainWindow):
         self.connect_btn.setStyleSheet("background-color: #3b4261;")
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
+        
+        # Re-enable resolution change
+        self.res_combo.setEnabled(True)
+        self.cam_combo.setEnabled(True)
         
         self.canvas_timer.stop()
         self.stat_timer.stop()
