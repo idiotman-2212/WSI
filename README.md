@@ -116,32 +116,20 @@ python pathocam_scanner.py
 - ⚠️ **Ánh sáng ổn định**: Đảm bảo ánh sáng không thay đổi trong quá trình quét
 - ⚠️ **Focus cố định**: Không thay đổi focus của kính hiển vi khi quét
 
-## 🎯 Kết quả
+### Kết quả
 
-### Hình ảnh kết quả
+#### Hình ảnh kết quả
 
-<!-- 
-Phần này để người dùng tự thêm hình ảnh kết quả sau khi quét.
-Có thể thêm các hình ảnh như:
-- Screenshot giao diện chương trình
-- Ảnh quét được (scan.png)
-- So sánh trước/sau
-- Video demo (nếu có)
--->
+![Ảnh quét mẫu mô bệnh học]![1765520883607](image/README/1765520883607.png)
+*Ví dụ ảnh quét mẫu mô bệnh học*
 
-**Ví dụ cấu trúc thêm hình ảnh:**
+![Giao diện chương trình]![1765520872427](image/README/1765520872427.png)
+*Giao diện PathoCam Scanner*
 
-### Ảnh quét mẫu mô bệnh học
+#### Video demo
 
-![1765513095174](image/README/1765513095174.png)
-
-### Giao diện chương trình
-
-![1765513074478](image/README/1765513074478.png)
-
-### Video demo
-
-Xem video demo tại: [![Video demo](./image/README/1765519716024.png)](./video/wsi-demo.mp4)
+[![Video demo PathoCam Scanner](https://img.youtube.com/vi/6X5K7w5jeFU/maxresdefault.jpg)](https://www.youtube.com/watch?v=rP0NvhQqxiw)
+*Video demo quá trình quét và tạo ảnh toàn slide (WSI)*
 
 ## 📊 Thống kê kỹ thuật
 

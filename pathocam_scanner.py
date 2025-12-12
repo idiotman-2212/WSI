@@ -79,7 +79,9 @@ class StitchingCanvas:
     def _ensure_size(self, x: int, y: int, w: int, h: int):
         """Ensure canvas is large enough"""
         if self.canvas is None:
-            size = 3000
+            # Initial size must be large enough for 5MP frames (2560x1920)
+            # Plus room for expansion in all directions
+            size = 8000
             self.canvas = np.zeros((size, size, 3), dtype=np.uint8)
             self.canvas_gray = np.zeros((size, size), dtype=np.uint8)
             self.offset_x = size // 2
