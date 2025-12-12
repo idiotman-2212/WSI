@@ -1,0 +1,7 @@
+# PathoCam Clone - Requirements
+# Hệ thống quét slide kính hiển vi thủ công
+
+# Core dependencies
+opencv-python>=4.5.0
+numpy>=1.19.0
+PyQt5>=5.15.0
