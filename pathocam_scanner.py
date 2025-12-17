@@ -1,10 +1,11 @@
 """
 PathoCam Clone - Manual Whole Slide Imaging System
-Phiên bản 7.0 - Image Registration để ghép ảnh chính xác
+Phiên bản 7.1 - Image Registration + Image Correction
 
 Thuật toán:
 1. Position tracking (rough) - ước lượng vị trí
 2. Image registration (precise) - tìm vị trí chính xác bằng template matching với canvas
+3. Image correction - Vignetting, Brightness, Sharpness
 
 Author: AI Assistant
 """
@@ -18,10 +19,108 @@ import time
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QGroupBox, QGridLayout, QComboBox, QSpinBox,
-    QMessageBox, QFileDialog
+    QMessageBox, QFileDialog, QSlider, QCheckBox
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt5.QtGui import QImage, QPixmap
+
+
+# ============================================================================
+# IMAGE CORRECTION - Vignetting, Brightness, Sharpness (Optimized)
+# ============================================================================
+
+class ImageCorrector:
+    """Hiệu chỉnh ảnh - TỐI ƯU CHO HIỆU SUẤT"""
+    
+    def __init__(self):
+        self.vignette_correction = False
+        self.brightness = 0  # -50 to +50
+        self.contrast = 0    # -50 to +50
+        self.sharpness = 0   # 0 to 100
+        
+        # Pre-computed masks (3 channel)
+        self._vignette_mask_3ch = None
+        self._mask_size = None
+        
+        # LUT for brightness/contrast (much faster)
+        self._lut = None
+        self._lut_params = None
+        
+    def _create_vignette_mask_3ch(self, h: int, w: int) -> np.ndarray:
+        """Tạo mask 3 channel (pre-computed, chỉ tạo 1 lần)"""
+        if self._vignette_mask_3ch is not None and self._mask_size == (h, w):
+            return self._vignette_mask_3ch
+            
+        # Downscale for speed, then upscale
+        scale = 0.25
+        sh, sw = int(h * scale), int(w * scale)
+        
+        Y, X = np.ogrid[:sh, :sw]
+        center_x, center_y = sw / 2, sh / 2
+        
+        dist = np.sqrt((X - center_x)**2 + (Y - center_y)**2)
+        max_dist = np.sqrt(center_x**2 + center_y**2)
+        dist_norm = dist / max_dist
+        
+        # Lighter correction
+        vignette = 1.0 + 0.3 * (dist_norm ** 1.5)
+        
+        # Upscale back
+        vignette = cv2.resize(vignette.astype(np.float32), (w, h))
+        
+        # Stack to 3 channels
+        self._vignette_mask_3ch = np.dstack([vignette, vignette, vignette])
+        self._mask_size = (h, w)
+        return self._vignette_mask_3ch
+        
+    def _create_lut(self, brightness: int, contrast: int) -> np.ndarray:
+        """Create lookup table for fast brightness/contrast"""
+        params = (brightness, contrast)
+        if self._lut is not None and self._lut_params == params:
+            return self._lut
+            
+        alpha = 1.0 + contrast / 100.0
+        beta = brightness * 2.55
+        
+        lut = np.arange(256, dtype=np.float32)
+        lut = alpha * lut + beta
+        lut = np.clip(lut, 0, 255).astype(np.uint8)
+        
+        self._lut = lut
+        self._lut_params = params
+        return self._lut
+        
+    def correct(self, frame: np.ndarray) -> np.ndarray:
+        """Apply corrections - OPTIMIZED"""
+        
+        # Skip if nothing to do
+        if not self.vignette_correction and self.brightness == 0 and self.contrast == 0 and self.sharpness == 0:
+            return frame
+            
+        result = frame
+        h, w = result.shape[:2]
+        
+        # 1. Brightness/Contrast using LUT (very fast)
+        if self.brightness != 0 or self.contrast != 0:
+            lut = self._create_lut(self.brightness, self.contrast)
+            result = cv2.LUT(result, lut)
+        
+        # 2. Vignette correction (vectorized, fast)
+        if self.vignette_correction:
+            mask = self._create_vignette_mask_3ch(h, w)
+            result = (result.astype(np.float32) * mask)
+            result = np.clip(result, 0, 255).astype(np.uint8)
+            
+        # 3. Sharpening (simple kernel, fast)
+        if self.sharpness > 20:  # Only if significant
+            # Simple fast sharpen kernel
+            amount = min(self.sharpness / 100.0, 0.5)
+            kernel = np.array([[-amount, -amount, -amount],
+                               [-amount, 1 + 8*amount, -amount],
+                               [-amount, -amount, -amount]])
+            result = cv2.filter2D(result, -1, kernel)
+            
+        return result
 
 
 # ============================================================================
@@ -416,6 +515,7 @@ class MainWindow(QMainWindow):
         
         self.canvas = StitchingCanvas()
         self.tracker = SimpleTracker()
+        self.corrector = ImageCorrector()  # Image correction
         self.camera = None
         
         self.scanning = False
@@ -434,7 +534,7 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         
     def setup_ui(self):
-        self.setWindowTitle("PathoCam Clone v7.0 - Image Registration")
+        self.setWindowTitle("PathoCam Clone v7.1 - Image Correction")
         self.setMinimumSize(1200, 750)
         self.setStyleSheet("""
             QMainWindow { background-color: #1a1b26; }
@@ -493,6 +593,7 @@ class MainWindow(QMainWindow):
         cam_layout.addWidget(self.res_combo, 1, 1)
         
         self.connect_btn = QPushButton("🔌 Kết nối Camera")
+        self.connect_btn.setFixedHeight(30)
         self.connect_btn.clicked.connect(self.toggle_camera)
         cam_layout.addWidget(self.connect_btn, 2, 0, 1, 2)
         
@@ -554,6 +655,46 @@ class MainWindow(QMainWindow):
         set_layout.addWidget(self.interval_spin, 0, 1)
         
         left_layout.addWidget(set_group)
+        
+        # Image Correction
+        corr_group = QGroupBox("🔧 Hiệu chỉnh ảnh")
+        corr_layout = QGridLayout(corr_group)
+        
+        # Vignette correction checkbox
+        self.vignette_cb = QCheckBox("Sửa vignetting (làm sáng rìa)")
+        self.vignette_cb.setChecked(False)
+        self.vignette_cb.stateChanged.connect(
+            lambda s: setattr(self.corrector, 'vignette_correction', s == Qt.Checked))
+        corr_layout.addWidget(self.vignette_cb, 0, 0, 1, 2)
+        
+        # Brightness slider
+        corr_layout.addWidget(QLabel("Độ sáng:"), 1, 0)
+        self.brightness_slider = QSlider(Qt.Horizontal)
+        self.brightness_slider.setRange(-50, 50)
+        self.brightness_slider.setValue(0)
+        self.brightness_slider.valueChanged.connect(
+            lambda v: setattr(self.corrector, 'brightness', v))
+        corr_layout.addWidget(self.brightness_slider, 1, 1)
+        
+        # Contrast slider
+        corr_layout.addWidget(QLabel("Tương phản:"), 2, 0)
+        self.contrast_slider = QSlider(Qt.Horizontal)
+        self.contrast_slider.setRange(-50, 50)
+        self.contrast_slider.setValue(0)
+        self.contrast_slider.valueChanged.connect(
+            lambda v: setattr(self.corrector, 'contrast', v))
+        corr_layout.addWidget(self.contrast_slider, 2, 1)
+        
+        # Sharpness slider
+        corr_layout.addWidget(QLabel("Độ nét:"), 3, 0)
+        self.sharpness_slider = QSlider(Qt.Horizontal)
+        self.sharpness_slider.setRange(0, 100)
+        self.sharpness_slider.setValue(0)
+        self.sharpness_slider.valueChanged.connect(
+            lambda v: setattr(self.corrector, 'sharpness', v))
+        corr_layout.addWidget(self.sharpness_slider, 3, 1)
+        
+        left_layout.addWidget(corr_group)
         
         # Info
         info_group = QGroupBox("ℹ️ Hướng dẫn")
@@ -651,26 +792,29 @@ class MainWindow(QMainWindow):
         """Process camera frame"""
         self.fps_counter += 1
         
-        # Track displacement
+        # Apply image corrections
+        corrected = self.corrector.correct(frame)
+        
+        # Track displacement (use original for better tracking)
         dx, dy = self.tracker.get_displacement(frame)
         self.accum_dx += dx
         self.accum_dy += dy
         
-        # Capture tile at interval
+        # Capture tile at interval (use corrected frame)
         if self.scanning:
             self.frame_counter += 1
             
             if self.frame_counter >= self.capture_interval:
-                # Add tile with accumulated displacement
-                self.canvas.add_tile(frame, self.accum_dx, self.accum_dy)
+                # Add corrected tile with accumulated displacement
+                self.canvas.add_tile(corrected, self.accum_dx, self.accum_dy)
                 
                 # Reset accumulators
                 self.accum_dx = 0.0
                 self.accum_dy = 0.0
                 self.frame_counter = 0
                 
-        # Update live view
-        display = cv2.resize(frame, (340, 255))
+        # Update live view (show corrected frame)
+        display = cv2.resize(corrected, (340, 255))
         
         # Info overlay
         pos = self.canvas.get_position()
